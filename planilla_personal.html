@@ -230,6 +230,33 @@ tr:hover td { background: rgba(79,142,247,0.03); }
 
 <!-- ═══ PERSONAL ═══ -->
 <div class="tab-panel active" id="tab-config">
+  <div class="card" style="border-color:rgba(79,142,247,0.3);background:rgba(79,142,247,0.04)">
+    <div class="card-title">⚙️ Configuración del taller</div>
+    <div class="form-row" style="margin-bottom:14px;flex-wrap:wrap;gap:14px">
+      <div class="form-group" style="max-width:140px">
+        <label>Hs. jornada normal</label>
+        <input type="number" id="cfg-jornada" min="1" max="24" step="0.5" placeholder="9">
+      </div>
+      <div class="form-group" style="max-width:140px">
+        <label>Hs. por enfermedad</label>
+        <input type="number" id="cfg-enfermedad" min="1" max="24" step="0.5" placeholder="8">
+      </div>
+      <div style="width:100%;border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-size:0.73rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Horario habitual del taller (se usa como sugerencia al cargar días)</div>
+        <div class="form-row" style="gap:10px;flex-wrap:wrap">
+          <div class="form-group" style="max-width:140px"><label>🌅 Entrada mañana</label><input type="time" id="cfg-mE"></div>
+          <div class="form-group" style="max-width:140px"><label>Salida mañana</label><input type="time" id="cfg-mS"></div>
+          <div class="form-group" style="max-width:140px"><label>🌆 Entrada tarde</label><input type="time" id="cfg-tE"></div>
+          <div class="form-group" style="max-width:140px"><label>Salida tarde</label><input type="time" id="cfg-tS"></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn btn-green btn-sm" onclick="guardarConfig()">💾 Guardar configuración</button>
+      <span id="cfg-ok" style="font-size:0.78rem;color:var(--accent2);display:none">✅ Guardado</span>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">Categorías y valor por hora</div>
     <div class="form-row" style="margin-bottom:12px">
@@ -319,7 +346,7 @@ tr:hover td { background: rgba(79,142,247,0.03); }
 // ═══════════════════════════════════════
 // ESTADO
 // ═══════════════════════════════════════
-let S = { categorias:[], empleados:[], fichajes:{}, pagos:{} };
+let S = { categorias:[], empleados:[], fichajes:{}, pagos:{}, config:{ hsJornada:9, hsEnfermedad:8, entradaManana:'08:00', salidaManana:'12:00', entradaTarde:'13:00', salidaTarde:'18:00' } };
 // fichajes[key][empId][fecha] = { mE, mS, tE, tS }
 // pagos[key][empId] = { adelanto, pagado }
 
@@ -356,6 +383,33 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
   });
 });
+
+// ═══════════════════════════════════════
+// CONFIG TALLER
+// ═══════════════════════════════════════
+function guardarConfig() {
+  S.config = {
+    hsJornada:    parseFloat(document.getElementById('cfg-jornada').value)    || 9,
+    hsEnfermedad: parseFloat(document.getElementById('cfg-enfermedad').value) || 8,
+    entradaManana: document.getElementById('cfg-mE').value || '08:00',
+    salidaManana:  document.getElementById('cfg-mS').value || '12:00',
+    entradaTarde:  document.getElementById('cfg-tE').value || '13:00',
+    salidaTarde:   document.getElementById('cfg-tS').value || '18:00',
+  };
+  save();
+  const ok = document.getElementById('cfg-ok');
+  ok.style.display='inline'; setTimeout(()=>ok.style.display='none', 2000);
+}
+function cargarConfig() {
+  const c = S.config || {};
+  const set = (id, val) => { const el=document.getElementById(id); if(el && val) el.value=val; };
+  set('cfg-jornada',    c.hsJornada    ?? 9);
+  set('cfg-enfermedad', c.hsEnfermedad ?? 8);
+  set('cfg-mE', c.entradaManana || '08:00');
+  set('cfg-mS', c.salidaManana  || '12:00');
+  set('cfg-tE', c.entradaTarde  || '13:00');
+  set('cfg-tS', c.salidaTarde   || '18:00');
+}
 
 // ═══════════════════════════════════════
 // CATEGORÍAS
@@ -447,9 +501,12 @@ function diasPeriodo(a,m,q) {
   }
   return out;
 }
+function hEnf() { return S.config?.hsEnfermedad ?? 8; }
+function hJornada() { return S.config?.hsJornada ?? 9; }
+
 function totalEmp(key, empId) {
   const fs = (S.fichajes[key]||{})[empId]||{};
-  return Object.values(fs).reduce((t,f) => t + (f.enfermo ? 8 : calcH(f.mE,f.mS) + calcH(f.tE,f.tS)), 0);
+  return Object.values(fs).reduce((t,f) => t + (f.enfermo ? hEnf() : calcH(f.mE,f.mS) + calcH(f.tE,f.tS)), 0);
 }
 function enfermedadEmp(key, empId) {
   const fs = (S.fichajes[key]||{})[empId]||{};
@@ -501,15 +558,36 @@ function renderFichaje() {
 
     const rowsHTML = S.empleados.map(e => {
       const f = ((S.fichajes[key][e.id]||{})[fecha])||{};
+      const enfermo = f.enfermo||false;
       const h = calcH(f.mE,f.mS) + calcH(f.tE,f.tS);
+      const hTotal = enfermo ? hEnf() : h;
+      const dis = enfermo ? 'disabled' : '';
+      const rowBg = enfermo ? 'background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:8px;' : 'padding:8px 0;';
       return `
-        <div class="emp-dia-row" id="edr_${e.id}_${fecha}">
-          <div class="col-label">${e.nombre}</div>
-          <input type="time" id="mE_${e.id}_${fecha}" value="${f.mE||''}" onchange="onTime('${key}','${fecha}',${e.id})">
-          <input type="time" id="mS_${e.id}_${fecha}" value="${f.mS||''}" onchange="onTime('${key}','${fecha}',${e.id})">
-          <input type="time" id="tE_${e.id}_${fecha}" value="${f.tE||''}" onchange="onTime('${key}','${fecha}',${e.id})">
-          <input type="time" id="tS_${e.id}_${fecha}" value="${f.tS||''}" onchange="onTime('${key}','${fecha}',${e.id})">
-          <div class="horas-badge" id="hb_${e.id}_${fecha}">${h>0?h.toFixed(1)+'h':'—'}</div>
+        <div class="emp-dia-row" id="edr_${e.id}_${fecha}" style="${rowBg}">
+          <div class="col-label">
+            ${e.nombre}
+            ${enfermo ? `<small style="color:var(--warn)">🏥 Parte de enfermedad — ${hEnf()}h</small>` : ''}
+          </div>
+          <div class="turno-group">
+            <span class="turno-lbl">🌅 Mañana</span>
+            <input type="time" id="mE_${e.id}_${fecha}" value="${f.mE||''}" onchange="onTime('${key}','${fecha}',${e.id})" ${dis} style="${enfermo?'opacity:0.25':''}">
+            <span class="turno-lbl">→</span>
+            <input type="time" id="mS_${e.id}_${fecha}" value="${f.mS||''}" onchange="onTime('${key}','${fecha}',${e.id})" ${dis} style="${enfermo?'opacity:0.25':''}">
+          </div>
+          <div class="turno-group">
+            <span class="turno-lbl">🌆 Tarde</span>
+            <input type="time" id="tE_${e.id}_${fecha}" value="${f.tE||''}" onchange="onTime('${key}','${fecha}',${e.id})" ${dis} style="${enfermo?'opacity:0.25':''}">
+            <span class="turno-lbl">→</span>
+            <input type="time" id="tS_${e.id}_${fecha}" value="${f.tS||''}" onchange="onTime('${key}','${fecha}',${e.id})" ${dis} style="${enfermo?'opacity:0.25':''}">
+          </div>
+          <label class="enf-btn ${enfermo?'activo':''}" onclick="onEnfermedad('${key}','${fecha}',${e.id})">
+            <input type="checkbox" id="enf_${e.id}_${fecha}" ${enfermo?'checked':''} style="pointer-events:none;width:15px;height:15px;accent-color:var(--warn)">
+            🏥 ${enfermo ? `Enfermo (${hEnf()}h) — clic para quitar` : 'Marcar enfermedad'}
+          </label>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;font-weight:700;color:${enfermo?'var(--warn)':'var(--accent2)'}">
+            ${hTotal>0 ? hTotal.toFixed(1)+'h' : '—'}
+          </div>
         </div>`;
     }).join('');
 
@@ -525,12 +603,57 @@ function renderFichaje() {
         </div>
       </div>
       <div class="dia-body" id="dbody_${fecha}">
-
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px" class="no-print">
+          <button class="btn btn-outline btn-xs" onclick="autocompletar('${key}','${fecha}')" title="Completa con el horario habitual del taller a quienes no tengan horario cargado">
+            ⏰ Cargar horario del taller
+          </button>
+        </div>
         ${rowsHTML}
       </div>`;
 
     grid.appendChild(div);
   });
+}
+
+function autocompletar(key, fecha) {
+  const c = S.config || {};
+  let alguno = false;
+  S.empleados.forEach(e => {
+    if(!S.fichajes[key]) S.fichajes[key]={};
+    if(!S.fichajes[key][e.id]) S.fichajes[key][e.id]={};
+    const f = S.fichajes[key][e.id][fecha]||{};
+    // solo si no tiene ningún dato
+    if(!f.mE && !f.mS && !f.tE && !f.tS && !f.enfermo) {
+      S.fichajes[key][e.id][fecha] = {
+        mE: c.entradaManana||'08:00',
+        mS: c.salidaManana ||'12:00',
+        tE: c.entradaTarde ||'13:00',
+        tS: c.salidaTarde  ||'18:00',
+        enfermo: false,
+      };
+      alguno = true;
+      // actualizar inputs en pantalla
+      const upd = (id,val) => { const el=document.getElementById(id); if(el) el.value=val; };
+      upd(`mE_${e.id}_${fecha}`, S.fichajes[key][e.id][fecha].mE);
+      upd(`mS_${e.id}_${fecha}`, S.fichajes[key][e.id][fecha].mS);
+      upd(`tE_${e.id}_${fecha}`, S.fichajes[key][e.id][fecha].tE);
+      upd(`tS_${e.id}_${fecha}`, S.fichajes[key][e.id][fecha].tS);
+      // recalcular badge
+      const h = calcH(S.fichajes[key][e.id][fecha].mE, S.fichajes[key][e.id][fecha].mS)
+              + calcH(S.fichajes[key][e.id][fecha].tE, S.fichajes[key][e.id][fecha].tS);
+      const hbEl = document.getElementById(`hb_${e.id}_${fecha}`);
+      if(hbEl) hbEl.textContent = h>0 ? h.toFixed(1)+'h' : '—';
+    }
+  });
+  // actualizar badge del día
+  let hDia = 0;
+  S.empleados.forEach(e => {
+    const ff = (S.fichajes[key][e.id]||{})[fecha]||{};
+    hDia += ff.enfermo ? hEnf() : calcH(ff.mE,ff.mS)+calcH(ff.tE,ff.tS);
+  });
+  const rdEl = document.getElementById(`resdh_${fecha}`);
+  if(rdEl) rdEl.textContent = hDia>0 ? hDia.toFixed(1)+'h registradas' : 'Sin horarios';
+  if(!alguno) alert('Todos los empleados ya tienen horario cargado en este día.');
 }
 
 function toggleDia(fecha) {
@@ -582,7 +705,7 @@ function onEnfermedad(key, fecha, empId) {
   let hDia = 0;
   S.empleados.forEach(e => {
     const ff = (S.fichajes[key][e.id]||{})[fecha]||{};
-    hDia += ff.enfermo ? 8 : (calcH(ff.mE,ff.mS) + calcH(ff.tE,ff.tS));
+    hDia += ff.enfermo ? hEnf() : (calcH(ff.mE,ff.mS) + calcH(ff.tE,ff.tS));
   });
   const rdEl = document.getElementById(`resdh_${fecha}`);
   if(rdEl) rdEl.textContent = hDia>0 ? hDia.toFixed(1)+'h registradas' : 'Sin horarios';
@@ -624,7 +747,7 @@ function renderQuincena() {
       const enfermo = f.enfermo||false;
       const hM = enfermo ? 0 : calcH(f.mE,f.mS);
       const hT = enfermo ? 0 : calcH(f.tE,f.tS);
-      const hD = enfermo ? 8 : hM+hT;
+      const hD = enfermo ? hEnf() : hM+hT;
       totalH += hD;
       const vacio = !enfermo && !f.mE && !f.mS && !f.tE && !f.tS;
       rows += `<tr style="${vacio?'opacity:0.3':''}${enfermo?'background:rgba(245,158,11,0.05)':''}">
@@ -908,7 +1031,7 @@ function renderAsistencia() {
       if(!esHabil) return;
       const f = keys.reduce((acc,k) => acc || (S.fichajes[k]||{})[e.id]?.[fecha], null) || {};
       const tieneHoras = calcH(f.mE,f.mS)+calcH(f.tE,f.tS)>0;
-      if(f.enfermo) { diasEnfermo++; horasTotales+=8; }
+      if(f.enfermo) { diasEnfermo++; horasTotales+=hEnf(); }
       else if(tieneHoras) { diasPresente++; horasTotales += calcH(f.mE,f.mS)+calcH(f.tE,f.tS); }
       else { diasAusente++; }
     });
@@ -989,7 +1112,7 @@ function renderAsistencia() {
       const tieneH = calcH(f.mE,f.mS)+calcH(f.tE,f.tS)>0;
       let color, title, icon;
       if(esDS) { color='var(--surface3)'; title='Fin de semana'; icon=''; }
-      else if(f.enfermo) { color='rgba(245,158,11,0.25)'; title=`🏥 Enfermo — 8h`; icon='🏥'; }
+      else if(f.enfermo) { color='rgba(245,158,11,0.25)'; title=`🏥 Enfermo — ${hEnf()}h`; icon='🏥'; }
       else if(tieneH) {
         const ht = calcH(f.mE,f.mS)+calcH(f.tE,f.tS);
         color='rgba(52,211,153,0.2)'; title=`✓ ${ht.toFixed(1)}h`; icon='✓';
@@ -1020,6 +1143,7 @@ function fmt(n) { return Number(n).toLocaleString('es-AR',{minimumFractionDigits
 // ═══════════════════════════════════════
 loadState();
 initSelects();
+cargarConfig();
 renderCats();
 renderEmps();
 </script>
